@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 flecs_api = { path = "../flecs_api/" }
+structopt = "0.3.25"
 tokio = {version = "1.18.2", features = ["full"] }

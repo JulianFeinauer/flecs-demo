@@ -1,13 +1,14 @@
 #[cfg(test)]
 mod test {
     use flecs_api::apis::configuration::Configuration;
-    use flecs_api::apis::default_api::{app_install_post, app_list_get};
-    use flecs_api::models::AppInstallPostRequest;
+    use flecs_api::apis::default_api::{app_install_post, app_list_get, AppInstallPostError, system_ping_get, SystemPingGetError};
+    use flecs_api::apis::Error;
+    use flecs_api::models::{AppInstallPost200Response, AppInstallPostRequest, SystemPingGet200Response};
 
     #[test]
     fn test_call() {
         let conf = Configuration {
-            base_path: "http://localhost:8080".to_string(),
+            base_path: "http://10.20.40.165:8951".to_string(),
             user_agent: None,
             client: Default::default(),
             basic_auth: None,
@@ -15,7 +16,7 @@ mod test {
             bearer_access_token: None,
             api_key: None,
         };
-        let mut rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(app_list_get(&conf));
         match result {
             Ok(inner) => {
@@ -41,9 +42,44 @@ mod test {
         }
 
         let result = rt.block_on(app_install_post(&conf, AppInstallPostRequest {
-            app: Some(String::from("iotdb")),
-            license_key: Some(String::from("my-license")),
-            version: Some(String::from("0.1.0"))
+            app: Some(String::from("org.apache.iotdb")),
+            license_key: None,
+            version: Some(String::from("0.13.0-node"))
         }));
+
+        match result {
+            Ok(_) => {
+                println!("Was installed!")
+            }
+            Err(e) => {
+                println!("Was not installed :(");
+                match e {
+                    Error::Reqwest(_) => {}
+                    Error::Serde(_) => {}
+                    Error::Io(_) => {}
+                    Error::ResponseError(e) => {
+                        println!("Status was {}", e.status);
+                        println!("Message: {}", e.content);
+                    }
+                }
+            }
+        }
+
+        let result = rt.block_on(system_ping_get(&conf));
+
+        match result {
+            Ok(result) => {
+                println!("Able to ping the system");
+                match result.additional_info {
+                    None => {}
+                    Some(s) => {
+                        println!("Response: {}", s);
+                    }
+                }
+            }
+            Err(_) => {
+                println!("Unable to ping the system...")
+            }
+        }
     }
 }
