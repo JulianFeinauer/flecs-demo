@@ -1,0 +1,10 @@
+app: de.jfeinauer.client
+title: Flecs Client
+version: demo
+description: |
+  Timeseries Database for IIoT Applications
+author: Julian Feinauer
+avatar: https://iotdb.apache.org/img/logo.png
+category: database
+image: jfeinauer/flecs-agent:demo
+multiInstance: false
