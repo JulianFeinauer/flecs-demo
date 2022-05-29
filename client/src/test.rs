@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod test {
     use flecs_api::apis::configuration::Configuration;
-    use flecs_api::apis::default_api::{app_install_post, app_list_get, AppInstallPostError, system_ping_get, SystemPingGetError};
+    use flecs_api::apis::default_api::{app_install_post, app_list_get, system_ping_get};
     use flecs_api::apis::Error;
-    use flecs_api::models::{AppInstallPost200Response, AppInstallPostRequest, SystemPingGet200Response};
+    use flecs_api::models::{AppInstallPostRequest};
 
     #[test]
     fn test_call() {

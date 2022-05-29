@@ -9,3 +9,7 @@ edition = "2021"
 flecs_api = { path = "../flecs_api/" }
 structopt = "0.3.25"
 tokio = {version = "1.18.2", features = ["full"] }
+paho-mqtt = "0.11.1"
+futures-util = "0.3.21"
+serde_json = "1.0.81"
+serde = {version = "1.0.81", features = ["derive"] }
