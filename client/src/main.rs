@@ -1,91 +1,90 @@
 extern crate core;
 
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::thread::sleep;
-use std::time::Duration;
 use flecs_api::apis::configuration::Configuration;
 use flecs_api::apis::default_api::system_ping_get;
+use futures_util::{pin_mut, select, stream::StreamExt, FutureExt};
+use std::thread::sleep;
+use std::time::Duration;
 use structopt::StructOpt;
-use futures_util::stream::StreamExt;
-use futures_util::{FutureExt};
 
 use paho_mqtt as mqtt;
 use paho_mqtt::Message;
+use tokio::runtime::Handle;
 
 // Tests
-mod test;
 mod commands;
+mod test;
 
-fn main() {
-    let rt = Arc::new(tokio::runtime::Runtime::new().unwrap());
-    let cli = Arc::new(Mutex::new(mqtt::AsyncClient::new("tcp://mqtt.eclipseprojects.io:1883").unwrap()));
+#[tokio::main]
+async fn main() {
+    let cli = mqtt::AsyncClient::new("tcp://mqtt.eclipseprojects.io:1883").unwrap();
 
     let connect_options = mqtt::ConnectOptionsBuilder::default()
         .automatic_reconnect(Duration::from_secs(1), Duration::from_secs(10))
         .finalize();
 
-    let client = cli.clone();
-    let rt2 = rt.clone();
-    cli.lock().unwrap().set_connected_callback(move |_| {
-        println!("Connected, starting subscriptions...");
-        let token = client.lock().unwrap().subscribe("test", 0).map(|_|{
-            println!("Subscribed!");
-        });
-        rt2.spawn(token);
-        println!("Sent subscription request...")
-    });
-    cli.lock().unwrap().set_message_callback(|_, m| {
-        match m {
-            Some(m) => {
-                println!("Message: {}", m);
-            }
-            _ => {}
-        }
-    });
+    let mut cli = cli;
+    let mut stream = cli.get_stream(25).fuse();
 
-    let client = cli.clone();
-    let rt2 = rt.clone();
-    thread::spawn(move || {
-        println!("Hello from sender thread");
+    let rt = Handle::current();
+    cli.connect_with_callbacks(
+        connect_options,
+        move |client, _| {
+            println!("Connected, starting subscriptions...");
+            // we need to spawn here, as the callback is not async
+            let client = client.clone();
+            rt.spawn(async move {
+                client
+                    .subscribe("test", 0)
+                    .map(|_| {
+                        println!("Subscribed!");
+                    })
+                    .await
+            });
+            println!("Sent subscription request...")
+        },
+        |_, _, _| {},
+    )
+    .await
+    .unwrap();
+
+    let sender = async {
+        println!("Hello from sender");
 
         let mut count = 0;
-
         loop {
-            println!("Sending Message {count}...");
-            rt2.spawn(client.lock().unwrap().publish(Message::new("test", format!("Hallo {count}"), 2)).map(|x| {
-                match x {
-                    Ok(_) => {
-                        println!("Message sent!")
-                    }
-                    Err(_) => {
-                        println!("Unable to send message!")
-                    }
-                };
-            }));
-            sleep(Duration::from_secs(2));
+            match cli
+                .publish(Message::new("test", format!("Hallo {count}"), 2))
+                .await
+            {
+                Ok(_) => {
+                    println!("Message sent!")
+                }
+                Err(err) => {
+                    println!("Unable to send message!: {err}")
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
             count += 1;
         }
-    });
+    }
+    .fuse();
+    pin_mut!(sender);
 
-    // Connect MQTT
-    let client = cli.clone();
-    rt.spawn(client.lock().unwrap().connect(connect_options).map(|_|{
-        println!("Connection established!");
-    }));
-
-    // Block on the receive loop
-    rt.block_on(async {
-        let mut stream = client.lock().unwrap().get_stream(25);
-
-        while let Some(msg) = stream.next().await {
-            if let Some(msg) = msg {
-                println!("Message: {}", msg);
-            } else {
-                println!("We are disconnected...");
-            }
+    loop {
+        select! {
+             msg = stream.next() => match msg {
+                Some(Some(msg)) => {
+                    println!("Message: {msg}");
+                }
+                _ => {
+                    println!("We are disconnected...");
+                    break;
+                }
+            },
+            _ = sender => {}
         }
-    });
+    }
 }
 
 #[allow(dead_code)]
